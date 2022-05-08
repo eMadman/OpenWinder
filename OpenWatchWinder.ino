@@ -1,8 +1,8 @@
 // Configuration
-#define CYCLES 5
+#define CYCLES 32
 #define ROT_R 5  //default 2
 #define ROT_L 5  //default 2
-#define PAUSE_MIN 30  //default 35
+#define PAUSE_MIN 43  //default 35
 
 // Pins
 #define LED_PIN 5
@@ -17,9 +17,6 @@
 #include <jled.h>
 #include <AccelStepper.h>
 #include <MultiStepper.h>
-#include <AceButton.h>
-
-using namespace ace_button;
 
 enum StateType
 {
@@ -33,7 +30,7 @@ enum StateType
 
 AccelStepper winder(8, 8, 10, 9, 11, false);
 JLed pwr_led = JLed(LED_PIN).FadeOn(1000);
-AceButton pwr_sw(SW_PIN);
+
 
 StateType WState = W_IDLE;
 int Rotations = CYCLES;
@@ -45,34 +42,29 @@ int LastMinute = false;
 int TargetPos = 0;
 long StartTime = 0;
 
-void handleSwEvent(AceButton *, uint8_t, uint8_t);
 
 void setup()
 {
   Serial.begin(115200);
   pinMode(SW_PIN, INPUT_PULLUP);
 
-  ButtonConfig *buttonConfig = pwr_sw.getButtonConfig();
-  buttonConfig->setEventHandler(handleSwEvent);
-  buttonConfig->setFeature(ButtonConfig::kFeatureDoubleClick);
-  buttonConfig->setFeature(ButtonConfig::kFeatureLongPress);
-  buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterLongPress);
-  buttonConfig->setFeature(ButtonConfig::kFeatureSuppressAfterDoubleClick);
-  buttonConfig->setFeature(ButtonConfig::kFeatureSuppressClickBeforeDoubleClick);
-  buttonConfig->setClickDelay(500);
-
+  
   winder.setMaxSpeed(ROT_SPEED);
   winder.setAcceleration(ROT_ACCEL);
   WState = W_IDLE;
 
   Serial.println("<< Winder: Ready");
+
+  Serial.println(">> Click: Start Winding");
+  Stop = false;
+  Start = true;
+  Continue = true;
+  WState = W_IDLE;
 }
 
 void loop()
 {
   StateType old_state = WState;
-
-  pwr_sw.check();
 
   switch (WState)
   {
@@ -214,97 +206,3 @@ void loop()
   pwr_led.Update();
 
 } // loop
-
-void handleSwEvent(AceButton *button, uint8_t eventType, uint8_t buttonState)
-{
-  switch (eventType)
-  {
-
-  case AceButton::kEventClicked:
-    switch (WState)
-    {
-    case W_IDLE:
-    case W_PAUSE:
-      Serial.println(">> Click: Start Winding");
-      Stop = false;
-      Start = true;
-      Continue = true;
-      WState = W_IDLE;
-      break;
-    default:
-      break;
-    }
-    break;
-
-  case AceButton::kEventLongPressed:
-    switch (WState)
-    {
-    case W_LEFT:
-    case W_RIGHT:
-    case W_PAUSE:
-      Serial.println(">> LongPress: Stop Winding");
-      Stop = true;
-      Continue = false;
-      pwr_led.Reset();
-      if (WState == W_PAUSE)
-      {
-        pwr_led.On();
-      }else{
-        pwr_led.Blink(100, 500).Forever();
-      }
-      break;
-    default:
-      break;
-    }
-    break;
-
-  case AceButton::kEventDoubleClicked:
-    pwr_led.Reset();
-    if (LedOn)
-    {
-      Serial.println(">> DoubleClick: LED Disabled");
-      pwr_led.Stop();
-      LedOn = false;
-    }
-    else
-    {
-      Serial.println(">> DoubleClick: LED Enabled");
-      LedOn = true;
-      switch (WState)
-      {
-      case W_IDLE:
-        Serial.println("<< LED: On");
-        pwr_led.On();
-        break;
-
-      case W_PAUSE:
-        if (!LastMinute)
-        {
-          Serial.println("<< LED: Breathe Slow");
-          pwr_led.Breathe(5000).Forever();
-        }
-        else
-        {
-          Serial.println("<< LED: Breathe Fast");
-          pwr_led.Breathe(1000).Forever();
-        }
-        break;
-
-      case W_LEFT:
-      case W_RIGHT:
-        Serial.println("<< LED: Blink");
-        pwr_led.Blink(1000, 200).Forever();
-        break;
-
-      default:
-        Serial.println("<< LED: WTF?");
-        pwr_led.Blink(50, 50).Forever();
-        break;
-      }
-    }
-    break;
-
-  default:
-    break;
-  }
-}
